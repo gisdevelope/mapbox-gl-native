@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
+
 import com.mapbox.mapboxsdk.LibraryLoader;
 import com.mapbox.mapboxsdk.MapStrictMode;
 import com.mapbox.mapboxsdk.R;
@@ -92,6 +93,27 @@ public class OfflineManager {
     void onError(String error);
   }
 
+  /**
+   * This callback receives an asynchronous response containing a list of all
+   * OfflineRegion added to the database during the merge.
+   */
+  @Keep
+  public interface MergeOfflineRegionsCallback {
+    /**
+     * Receives the list of merged offline regions.
+     *
+     * @param offlineRegions the offline region array
+     */
+    void onMerge(OfflineRegion[] offlineRegions);
+
+    /**
+     * Receives the error message.
+     *
+     * @param error the error message
+     */
+    void onError(String error);
+  }
+
   /*
    * Constructor
    */
@@ -172,6 +194,53 @@ public class OfflineManager {
 
       @Override
       public void onError(final String error) {
+        getHandler().post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            callback.onError(error);
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Merge offline regions from a secondary database into the main offline database.
+   * <p>
+   * When the merge is completed, or fails, the {@link MergeOfflineRegionsCallback} will be invoked on the main thread.
+   * <p>
+   * The secondary database may need to be upgraded to the latest schema.
+   * This is done in-place and requires write-access to the provided path.
+   * <p>
+   * Only resources and tiles that belong to a region will be copied over. Identical
+   * regions will be flattened into a single new region in the main database.
+   * <p>
+   * A callback with a `MapboxOfflineTileCountExceededException` error will be invoked if
+   * the merge operation would result in the offline tile count limit being exceeded.
+   * <p>
+   * Merged regions may not be in a completed status if the secondary database
+   * does not contain all the tiles or resources required by the region definition.
+   *
+   * @param path     secondary database writable path
+   * @param callback completion/error callback
+   */
+  public void mergeOfflineRegions(@NonNull String path, @NonNull final MergeOfflineRegionsCallback callback) {
+    fileSource.activate();
+    mergeOfflineRegions(fileSource, path, new MergeOfflineRegionsCallback() {
+      @Override
+      public void onMerge(OfflineRegion[] offlineRegions) {
+        getHandler().post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            callback.onMerge(offlineRegions);
+          }
+        });
+      }
+
+      @Override
+      public void onError(String error) {
         getHandler().post(new Runnable() {
           @Override
           public void run() {
@@ -272,4 +341,6 @@ public class OfflineManager {
   private native void createOfflineRegion(FileSource fileSource, OfflineRegionDefinition definition,
                                           byte[] metadata, CreateOfflineRegionCallback callback);
 
+  @Keep
+  private native void mergeOfflineRegions(FileSource fileSource, String path, MergeOfflineRegionsCallback callback);
 }
