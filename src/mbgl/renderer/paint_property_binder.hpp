@@ -302,8 +302,14 @@ public:
     };
 
     void populateVertexVector(const GeometryTileFeature&, std::size_t length, const ImagePositions& patternPositions, const optional<PatternDependency>& patternDependencies) override {
-        if (!patternDependencies) return;
-        if (!patternPositions.empty()) {
+
+        if (patternDependencies->mid == "")  {
+            for (std::size_t i = zoomInVertexVector.vertexSize(); i < length; ++i) {
+                patternToVertexVector.emplace_back(Vertex { std::array<uint16_t, 4>{{0, 0, 0, 0}} });
+                zoomInVertexVector.emplace_back(Vertex2 { std::array<uint16_t, 4>{{0, 0, 0, 0}} } );
+                zoomOutVertexVector.emplace_back(Vertex2 { std::array<uint16_t, 4>{{0, 0, 0, 0}} });
+            }
+        } else if (!patternPositions.empty()) {
             const auto min = patternPositions.find(patternDependencies->min);
             const auto mid = patternPositions.find(patternDependencies->mid);
             const auto max = patternPositions.find(patternDependencies->max);
